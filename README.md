@@ -1,2 +1,0 @@
-# parkinsons-app
-hello
