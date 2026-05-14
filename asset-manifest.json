@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/parkinsons-app/static/css/main.351a8b25.css",
+    "main.js": "/parkinsons-app/static/js/main.3de30522.js",
+    "static/js/453.20359781.chunk.js": "/parkinsons-app/static/js/453.20359781.chunk.js",
+    "index.html": "/parkinsons-app/index.html",
+    "main.351a8b25.css.map": "/parkinsons-app/static/css/main.351a8b25.css.map",
+    "main.3de30522.js.map": "/parkinsons-app/static/js/main.3de30522.js.map",
+    "453.20359781.chunk.js.map": "/parkinsons-app/static/js/453.20359781.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.351a8b25.css",
+    "static/js/main.3de30522.js"
+  ]
+}
