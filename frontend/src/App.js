@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import HandCamera from './HandCamera';
 import HandGame from './HandGame';
+import VoiceFlappyGame from './VoiceFlappyGame';
 import ShadowGame from './ShadowGame';
 import JumpGame from './JumpGame';
 import GunGame from './GunGame';
@@ -23,6 +24,7 @@ const GAMES = [
   { id: 'jump',   name: 'StarJumper',  desc: 'ฝึกการทรงตัวและการเคลื่อนไหวขา',      emoji: '🐰', bg: '#FFF0E8', color: '#C05E35', border: '#F4956A', sdark: '#FFD4B8', slight: '#FFF5EE', drop: '#C05E35', levels: true,  daily: true,  available: true  },
   { id: 'shadow', name: 'ShadowMove',  desc: 'ฝึกการเคลื่อนไหวแขนขาและการประสานงาน', emoji: '🥊', bg: '#FAF5FF', color: '#7C3AED', border: '#A78BFA', sdark: '#DDD6FE', slight: '#FAF5FF', drop: '#7C3AED', levels: true,  daily: true,  available: true  },
   { id: 'gun',    name: 'FaceShooter', desc: 'ฝึกกล้ามเนื้อใบหน้าและการควบคุมนิ้วมือ', emoji: '🏹', bg: '#FFF5F5', color: '#DC2626', border: '#FCA5A5', sdark: '#FECACA', slight: '#FFF5F5', drop: '#DC2626', levels: true,  daily: true,  available: true  },
+  { id: 'flappy', name: 'นกน้อยนักบิน', desc: 'ใช้เสียงบังคับนก', emoji: '🐥', bg: '#FFF9E6', color: '#D4900A', border: '#F9C784', sdark: '#FDE9B8', slight: '#FFFDF5', drop: '#D4900A', levels: true, daily: true, available: true },
 ];
 
 const COLORS = {
@@ -787,7 +789,7 @@ function App() {
                       {g.levels && g.available && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
                           {[1,2,3].map(lv => (
-                            <div key={lv} style={{ width: 8, height: 8, background: lv <= 2 ? g.color : 'rgba(0,0,0,0.12)' }}/>
+                            <div key={lv} style={{ width: 8, height: 8, background: lv <= 3 ? g.color : 'rgba(0,0,0,0.12)' }}/>
                           ))}
                           <span style={{ fontSize: 10, color: COLORS.sub, marginLeft: 2, fontFamily: FONT }}>3 ด่าน</span>
                         </div>
@@ -825,6 +827,7 @@ function App() {
                   {gameMode === 'shadow' && <ShadowGame onGameEnd={(r) => handleGameEnd('shadow', '10ท่าพาเพลิน', r)}/>}
                   {gameMode === 'jump' && <JumpGame onGameEnd={(r) => handleGameEnd('jump', 'กระต่ายหรรษา', r)}/>}
                   {gameMode === 'gun' && <GunGame onGameEnd={(r) => handleGameEnd('gun', 'นักธนู', r)}/>}
+                  {gameMode === 'flappy' && <VoiceFlappyGame startLevel={selectedLevel}/>}
                   {(gameMode === 'bird' || gameMode === 'runner') && (
                     <div style={{ textAlign: 'center', padding: '60px 24px' }}>
                       <div style={{ fontSize: 64, marginBottom: 16 }}>
@@ -870,9 +873,9 @@ function App() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
                     {[
-                      { lv: 1, label: 'EASY',   stars: '★★★', locked: false },
+                      { lv: 1, label: 'EASY',   stars: '★☆☆', locked: false },
                       { lv: 2, label: 'NORMAL', stars: '★★☆', locked: false },
-                      { lv: 3, label: 'HARD',   stars: '☆☆☆', locked: true },
+                      { lv: 3, label: 'HARD',   stars: '★★★', locked: false },
                     ].map(item => (
                       <div
                         key={item.lv}
