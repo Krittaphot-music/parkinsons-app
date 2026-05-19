@@ -3,7 +3,7 @@ import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 const W = 400, H = 600;
 
-function JumpGame({ startLevel = 1 }) {
+function JumpGame({ startLevel = 1, onGameEnd }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const poseLandmarkerRef = useRef(null);
@@ -15,6 +15,11 @@ function JumpGame({ startLevel = 1 }) {
   const prevKneeRef = useRef(null);
   const baseShoulderRef = useRef(null);
   const jumpCooldownRef = useRef(0);
+  const cdTimerRef = useRef(null);
+  const liftCountRef = useRef(0);
+  const liftHeightsRef = useRef([]);
+  const liftTimestampsRef = useRef([]);
+  const playerXHistoryRef = useRef([]);
   const lastLandmarksRef = useRef(null);
   const skeletonCanvasRef = useRef(null);
   const calibratedRef = useRef(false);
@@ -178,6 +183,9 @@ function JumpGame({ startLevel = 1 }) {
           if (kneeDelta > 0.04 && kneeRaise > -0.05 && jumpCooldownRef.current <= 0) {
             jumped = true;
             jumpCooldownRef.current = 30;
+            liftCountRef.current += 1;
+            liftHeightsRef.current.push(kneeDelta);
+            liftTimestampsRef.current.push(Date.now());
           }
         }
         if (jumpCooldownRef.current > 0) jumpCooldownRef.current -= 1;
@@ -194,6 +202,7 @@ function JumpGame({ startLevel = 1 }) {
 
       if (gameStateRef.current === 'playing') {
         const player = playerRef.current;
+        if (frameCountRef.current % 10 === 0) playerXHistoryRef.current.push(player.x);
 
         player.x += leanX * PLAYER_SPEED;
         player.x = Math.max(PLAYER_W/2, Math.min(W - PLAYER_W/2, player.x));
@@ -272,6 +281,7 @@ function JumpGame({ startLevel = 1 }) {
             setGameState('done');
             setFinalScore(Math.floor(scoreRef.current / 10));
             setStatus('เกมจบแล้ว!');
+            if (onGameEnd) onGameEnd({ win: false, stars: 1, level: currentLevelRef.current, metrics: { ...calcJumpMetrics(), final_score: Math.floor(scoreRef.current/10), reason: 'monster' } });
           }
         });
 
@@ -281,6 +291,7 @@ function JumpGame({ startLevel = 1 }) {
           if (currentLevelRef.current < 3) {
             setUnlockedLevel(prev => Math.max(prev, currentLevelRef.current + 1));
           }
+          if (onGameEnd) onGameEnd({ win: true, stars: 3, level: currentLevelRef.current, metrics: { ...calcJumpMetrics(), final_score: Math.floor(scoreRef.current/10), reason: 'win' } });
         }
 
         if (player.y > H + 100) {
@@ -288,6 +299,7 @@ function JumpGame({ startLevel = 1 }) {
           setGameState('done');
           setFinalScore(Math.floor(scoreRef.current / 10));
           setStatus('ตกลงมาแล้ว! เกมจบ');
+          if (onGameEnd) onGameEnd({ win: false, stars: 1, level: currentLevelRef.current, metrics: { ...calcJumpMetrics(), final_score: Math.floor(scoreRef.current/10), reason: 'fall' } });
         }
       }
 
@@ -369,7 +381,29 @@ function JumpGame({ startLevel = 1 }) {
     };
   }, []);
 
+
+  const calcJumpMetrics = () => {
+    const heights = liftHeightsRef.current;
+    const xs = playerXHistoryRef.current;
+    const stamps = liftTimestampsRef.current;
+    const avgHeight = heights.length > 0 ? heights.reduce((a,b)=>a+b,0)/heights.length : 0;
+    const heightVariance = heights.length > 1
+      ? heights.reduce((s,h)=>s+(h-avgHeight)**2,0)/(heights.length-1) : 0;
+    const consistency = Math.max(0, Math.round((1 - Math.sqrt(heightVariance)/Math.max(avgHeight,0.01))*100));
+    const xRange = xs.length > 0 ? Math.max(...xs) - Math.min(...xs) : 0;
+    const lateral = Math.min(100, Math.round((xRange / 400) * 100));
+    const intervals = stamps.length > 1
+      ? stamps.slice(1).map((t,i)=>t-stamps[i]) : [];
+    const avgInterval = intervals.length > 0 ? Math.round(intervals.reduce((a,b)=>a+b,0)/intervals.length) : null;
+    return { lift_count: liftCountRef.current, consistency_score: consistency, lateral_control: lateral, avg_jump_interval_ms: avgInterval };
+  };
+
   const startGame = (level = currentLevel) => {
+    if (cdTimerRef.current) { clearInterval(cdTimerRef.current); cdTimerRef.current = null; }
+    liftCountRef.current = 0;
+    liftHeightsRef.current = [];
+    liftTimestampsRef.current = [];
+    playerXHistoryRef.current = [];
     const cfg = LEVELS[level];
     setCurrentLevel(level);
     currentLevelRef.current = level;
@@ -420,11 +454,11 @@ function JumpGame({ startLevel = 1 }) {
         };
 
         playBeep(440);
-        const cd = setInterval(() => {
+        cdTimerRef.current = setInterval(() => {
           count -= 1;
           setCountdownNum(count);
           if (count <= 0) {
-            clearInterval(cd);
+            clearInterval(cdTimerRef.current); cdTimerRef.current = null;
             playBeep(880);
             setStatus('เอนซ้าย-ขวาเพื่อขยับ ยกเข่าเพื่อกระโดด!');
             setGameState('playing');

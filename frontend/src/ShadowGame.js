@@ -191,7 +191,32 @@ function drawPose(ctx, pose, cx, cy, s, color = '#ffffff') {
   pose.draw(ctx, cx, cy, s);
 }
 
-function ShadowGame({ startLevel = 1 }) {
+// วัด range of motion จริงๆ จาก landmarks ตาม pose ที่ทำสำเร็จ
+function measureROM(lm, poseName) {
+  if (!lm) return null;
+  const lw = lm[15], rw = lm[16], ls = lm[11], rs = lm[12];
+  const lk = lm[25], rk = lm[26], lh = lm[23], rh = lm[24];
+  switch (poseName) {
+    case 'กางแขนออก':
+      return parseFloat(((lw.x - ls.x) + (rs.x - rw.x)).toFixed(3)); // arm spread
+    case 'ยกแขนทั้งสอง':
+      return parseFloat((((ls.y - lw.y) + (rs.y - rw.y)) / 2).toFixed(3)); // overhead reach
+    case 'แยกขา':
+      return parseFloat(Math.abs(lk.x - rk.x).toFixed(3)); // leg spread
+    case 'ยกแขนซ้าย':
+      return parseFloat((ls.y - lw.y).toFixed(3)); // left arm height
+    case 'ยกแขนขวา':
+      return parseFloat((rs.y - rw.y).toFixed(3)); // right arm height
+    case 'เอียงซ้าย':
+      return parseFloat((ls.y - rs.y).toFixed(3)); // lateral tilt
+    case 'เอียงขวา':
+      return parseFloat((rs.y - ls.y).toFixed(3)); // lateral tilt
+    default:
+      return null;
+  }
+}
+
+function ShadowGame({ startLevel = 1, onGameEnd }) {
   const videoRef = useRef(null);
   const mainCanvasRef = useRef(null);
   const poseCanvasRef = useRef(null);
@@ -204,9 +229,16 @@ function ShadowGame({ startLevel = 1 }) {
   const scoreRef = useRef(0);
   const movesRef = useRef(0);
   const currentLevelRef = useRef(1);
-  const holdNeededRef = useRef(30);
+  const holdNeededRef = useRef(3000); // milliseconds แทน frames
   const frameCountRef = useRef(0);
   const lastResultsRef = useRef(null);
+  const gameTimerRef = useRef(null);  // เก็บ timer ID เพื่อ clear เมื่อ startGame ใหม่
+  const holdStartTimeRef = useRef(null); // จับเวลาตั้งแต่เริ่มถือท่า
+  // metrics refs
+  const romMeasurementsRef = useRef([]);
+  const poseTimesRef = useRef([]);
+  const poseStartTimeRef = useRef(null);
+  const lastLandmarksRef = useRef(null);
 
   const [status, setStatus] = useState('กำลังโหลด AI...');
   const [gameState, setGameState] = useState('idle');
@@ -346,13 +378,14 @@ function ShadowGame({ startLevel = 1 }) {
 
       if (results.landmarks && results.landmarks.length > 0) {
         const lm = results.landmarks[0];
+        lastLandmarksRef.current = lm;
 
         PoseLandmarker.POSE_CONNECTIONS.forEach(({ start, end }) => {
           const s = lm[start], e = lm[end];
           ctx.beginPath();
           ctx.moveTo((1 - s.x) * W, s.y * H);
           ctx.lineTo((1 - e.x) * W, e.y * H);
-          ctx.strokeStyle = 'rgba(34, 197, 94, 0.7)';
+          ctx.strokeStyle = 'rgba(34, 197, 94, 1.0)';
           ctx.lineWidth = 3;
           ctx.stroke();
         });
@@ -371,13 +404,26 @@ function ShadowGame({ startLevel = 1 }) {
           setIsMatching(matched);
 
           if (matched) {
-            holdTimeRef.current += 1;
-            setHoldProgress(Math.min(holdTimeRef.current / holdNeededRef.current * 100, 100));
-            if (holdTimeRef.current >= holdNeededRef.current) {
+            // เริ่มจับเวลาเมื่อเริ่มถือท่าครั้งแรก
+            if (holdStartTimeRef.current === null) {
+              holdStartTimeRef.current = performance.now();
+            }
+            const holdDuration = performance.now() - holdStartTimeRef.current;
+            const progress = Math.min(holdDuration / holdNeededRef.current * 100, 100);
+            setHoldProgress(progress);
+
+            if (holdDuration >= holdNeededRef.current) {
               scoreRef.current += 10;
               movesRef.current += 1;
               setFlash(true);
               setTimeout(() => setFlash(false), 300);
+              // เก็บ ROM และ completion time
+              const romVal = measureROM(lastLandmarksRef.current, currentPoseRef.current?.name);
+              if (romVal !== null) romMeasurementsRef.current.push(romVal);
+              if (poseStartTimeRef.current !== null) {
+                poseTimesRef.current.push(Date.now() - poseStartTimeRef.current);
+              }
+              poseStartTimeRef.current = Date.now();
 
               try {
                 const ctx2 = new AudioContext();
@@ -398,14 +444,15 @@ function ShadowGame({ startLevel = 1 }) {
               }
               currentPoseRef.current = queue[0];
               setCurrentPoseName(queue[0].name);
-              holdTimeRef.current = 0;
+              holdStartTimeRef.current = null; // reset timer
               setHoldProgress(0);
               drawUpcoming(queue.slice(1));
               drawTargetPose(queue[0]);
             }
           } else {
-            holdTimeRef.current = Math.max(0, holdTimeRef.current - 0.5);
-            setHoldProgress(Math.max(0, holdTimeRef.current / holdNeededRef.current * 100));
+            // ปล่อยท่า — reset hold timer
+            holdStartTimeRef.current = null;
+            setHoldProgress(0);
           }
         }
       }
@@ -421,10 +468,15 @@ function ShadowGame({ startLevel = 1 }) {
   }, []);
 
   const startGame = (level = currentLevel) => {
+    // clear timer เก่าก่อนทุกครั้ง — ป้องกัน timer สะสมจาก startGame หลายครั้ง
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
+    }
     const cfg = LEVELS[level];
     setCurrentLevel(level);
     currentLevelRef.current = level;
-    holdNeededRef.current = cfg.holdNeeded;
+    holdNeededRef.current = 3000; // 3 วินาที (ms) ทุก level
 
     const queue = generateQueue(level);
     poseQueueRef.current = queue;
@@ -432,6 +484,10 @@ function ShadowGame({ startLevel = 1 }) {
     holdTimeRef.current = 0;
     scoreRef.current = 0;
     movesRef.current = 0;
+    romMeasurementsRef.current = [];
+    poseTimesRef.current = [];
+    poseStartTimeRef.current = null;
+    holdStartTimeRef.current = null;
     setScore(null);
     setHoldProgress(0);
     setTimeLeft(cfg.timeLimit);
@@ -480,24 +536,52 @@ function ShadowGame({ startLevel = 1 }) {
     }, 3200);
 
     let t = cfg.timeLimit;
-    const timer = setInterval(() => {
+    gameTimerRef.current = setInterval(() => {
       t -= 1;
       setTimeLeft(t);
       if (movesRef.current >= cfg.targetMoves) {
-        clearInterval(timer);
+        clearInterval(gameTimerRef.current);
         gameStateRef.current = 'done';
         setGameState('done');
-        setScore({ score: scoreRef.current, moves: movesRef.current, win: true });
+        const win = true;
+        setScore({ score: scoreRef.current, moves: movesRef.current, win });
         setStatus('🎉 ชนะแล้ว!');
         if (level < 3) setUnlockedLevel(prev => Math.max(prev, level + 1));
         if (audioRef.current) audioRef.current.pause();
+        const avg = arr => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+        const roms = romMeasurementsRef.current;
+        const times = poseTimesRef.current;
+        if (onGameEnd) onGameEnd({
+          win, stars: 3, level,
+          metrics: {
+            completion_rate: 1.0,
+            avg_rom_score: roms.length > 0 ? parseFloat(avg(roms).toFixed(3)) : null,
+            avg_pose_time: times.length > 0 ? Math.round(avg(times)) : null,
+            poses_completed: movesRef.current,
+          }
+        });
       } else if (t <= 0) {
-        clearInterval(timer);
+        clearInterval(gameTimerRef.current);
         gameStateRef.current = 'done';
         setGameState('done');
-        setScore({ score: scoreRef.current, moves: movesRef.current, win: false });
+        const win = false;
+        const completionRate = parseFloat((movesRef.current / cfg.targetMoves).toFixed(2));
+        setScore({ score: scoreRef.current, moves: movesRef.current, win });
         setStatus('เกมจบแล้ว!');
         if (audioRef.current) audioRef.current.pause();
+        const avg = arr => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+        const roms = romMeasurementsRef.current;
+        const times = poseTimesRef.current;
+        const stars = completionRate >= 0.8 ? 2 : completionRate >= 0.5 ? 1 : 0;
+        if (onGameEnd) onGameEnd({
+          win, stars, level,
+          metrics: {
+            completion_rate: completionRate,
+            avg_rom_score: roms.length > 0 ? parseFloat(avg(roms).toFixed(3)) : null,
+            avg_pose_time: times.length > 0 ? Math.round(avg(times)) : null,
+            poses_completed: movesRef.current,
+          }
+        });
       }
     }, 1000);
   };

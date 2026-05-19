@@ -4,6 +4,7 @@ import HandGame from './HandGame';
 import ShadowGame from './ShadowGame';
 import JumpGame from './JumpGame';
 import GunGame from './GunGame';
+import AeroGame from './AeroGame';
 import MedicineReminder from './MedicineReminder';
 import StreakPage from './StreakPage';
 import ProfilePage from './ProfilePage';
@@ -23,6 +24,7 @@ const GAMES = [
   { id: 'jump',   name: 'StarJumper',  desc: 'ฝึกการทรงตัวและการเคลื่อนไหวขา',      emoji: '🐰', bg: '#FFF0E8', color: '#C05E35', border: '#F4956A', sdark: '#FFD4B8', slight: '#FFF5EE', drop: '#C05E35', levels: true,  daily: true,  available: true  },
   { id: 'shadow', name: 'ShadowMove',  desc: 'ฝึกการเคลื่อนไหวแขนขาและการประสานงาน', emoji: '🥊', bg: '#FAF5FF', color: '#7C3AED', border: '#A78BFA', sdark: '#DDD6FE', slight: '#FAF5FF', drop: '#7C3AED', levels: true,  daily: true,  available: true  },
   { id: 'gun',    name: 'FaceShooter', desc: 'ฝึกกล้ามเนื้อใบหน้าและการควบคุมนิ้วมือ', emoji: '🏹', bg: '#FFF5F5', color: '#DC2626', border: '#FCA5A5', sdark: '#FECACA', slight: '#FFF5F5', drop: '#DC2626', levels: true,  daily: true,  available: true  },
+  { id: 'aero',   name: 'AeroDance',   desc: 'เต้นอาโรบิก 4 เซต ฝึกทรงตัวและ ROM',     emoji: '🕺', bg: '#F0FFF4', color: '#059669', border: '#34D399', sdark: '#A7F3D0', slight: '#ECFDF5', drop: '#059669', levels: false, daily: true,  available: true  },
 ];
 
 const COLORS = {
@@ -65,6 +67,25 @@ function useIsWide() {
   return isWide;
 }
 
+
+// Card ต้องอยู่นอก App เพื่อกัน unmount/remount เมื่อ App re-render
+const Card = ({ children, style = {}, onClick, onMouseEnter, onMouseLeave }) => (
+  <div
+    onClick={onClick}
+    onMouseEnter={onMouseEnter}
+    onMouseLeave={onMouseLeave}
+    style={{
+      background: COLORS.card,
+      border: `4px solid ${COLORS.border}`,
+      borderRadius: 0,
+      boxShadow: `inset -3px -3px 0 #FFD4B8, inset 3px 3px 0 #FFF5EE, 4px 4px 0 ${COLORS.orangeDark}`,
+      ...style,
+      cursor: onClick ? 'pointer' : 'default',
+    }}
+  >
+    {children}
+  </div>
+);
 
 function App() {
   const isMobile = useIsMobile();
@@ -357,23 +378,6 @@ function App() {
     } catch { return 0; }
   })();
 
-  const Card = ({ children, style = {}, onClick, onMouseEnter, onMouseLeave }) => (
-    <div
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      style={{
-        background: COLORS.card,
-        border: `4px solid ${COLORS.border}`,
-        borderRadius: 0,
-        boxShadow: `inset -3px -3px 0 #FFD4B8, inset 3px 3px 0 #FFF5EE, 4px 4px 0 ${COLORS.orangeDark}`,
-        ...style,
-        cursor: onClick ? 'pointer' : 'default',
-      }}
-    >
-      {children}
-    </div>
-  );
 
   const navItems = [
     { key: 'home',      label: 'หน้าหลัก', icon: <Home size={isMobile ? 22 : 16}/> },
@@ -825,6 +829,7 @@ function App() {
                   {gameMode === 'shadow' && <ShadowGame onGameEnd={(r) => handleGameEnd('shadow', '10ท่าพาเพลิน', r)}/>}
                   {gameMode === 'jump' && <JumpGame onGameEnd={(r) => handleGameEnd('jump', 'กระต่ายหรรษา', r)}/>}
                   {gameMode === 'gun' && <GunGame onGameEnd={(r) => handleGameEnd('gun', 'นักธนู', r)}/>}
+                  {gameMode === 'aero' && <AeroGame onGameEnd={(r) => handleGameEnd('aero', 'AeroDance', r)}/>}
                   {(gameMode === 'bird' || gameMode === 'runner') && (
                     <div style={{ textAlign: 'center', padding: '60px 24px' }}>
                       <div style={{ fontSize: 64, marginBottom: 16 }}>
@@ -872,18 +877,18 @@ function App() {
                     {[
                       { lv: 1, label: 'EASY',   stars: '★★★', locked: false },
                       { lv: 2, label: 'NORMAL', stars: '★★☆', locked: false },
-                      { lv: 3, label: 'HARD',   stars: '☆☆☆', locked: true },
+                      { lv: 3, label: 'HARD',   stars: '★☆☆', locked: false },
                     ].map(item => (
                       <div
                         key={item.lv}
-                        onClick={() => !item.locked && setSelectedLevel(item.lv)}
+                        onClick={() => setSelectedLevel(item.lv)}
                         style={{
                           background: selectedLevel === item.lv && !item.locked ? selectedGame.bg : '#fff',
                           border: `3px solid ${selectedLevel === item.lv && !item.locked ? selectedGame.border : '#E8C4A8'}`,
                           boxShadow: `inset -2px -2px 0 ${selectedLevel === item.lv && !item.locked ? selectedGame.sdark : '#F0E0D0'}, inset 2px 2px 0 #fff, 3px 3px 0 ${selectedLevel === item.lv && !item.locked ? selectedGame.drop : '#C8A898'}`,
                           padding: '14px 8px', textAlign: 'center',
-                          cursor: item.locked ? 'not-allowed' : 'pointer',
-                          opacity: item.locked ? 0.4 : 1,
+                          cursor: 'pointer',
+                          opacity: 1,
                         }}
                       >
                         <div style={{ fontSize: item.locked ? 18 : 18, color: COLORS.text, marginBottom: 4, fontFamily: FONT }}>

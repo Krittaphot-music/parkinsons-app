@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { FilesetResolver, HandLandmarker, FaceLandmarker } from '@mediapipe/tasks-vision';
 
-function GunGame({ startLevel = 1 }) {
+function GunGame({ startLevel = 1, onGameEnd }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const handLandmarkerRef = useRef(null);
@@ -25,6 +25,12 @@ function GunGame({ startLevel = 1 }) {
   const frameCountRef = useRef(0);
   const lastHandResultsRef = useRef(null);
   const lastFaceResultsRef = useRef({ faceBlendshapes: [] });
+  const cdTimerRef = useRef(null);
+  const birdSpawnRef = useRef(null);
+  const shotsFiredRef = useRef(0);
+  const shotsHitRef = useRef(0);
+  const exprSpeedsRef = useRef([]);
+  const exprStartTimeRef = useRef(null);
 
   const [gameState, setGameState] = useState('idle');
   const [status, setStatus] = useState('กำลังโหลด AI...');
@@ -267,6 +273,7 @@ function GunGame({ startLevel = 1 }) {
           currentExprRef.current = newExpr;
           setCurrentExpr(newExpr);
           exprTimerRef.current = 300;
+          exprStartTimeRef.current = Date.now();
         }
       }
 
@@ -278,6 +285,7 @@ function GunGame({ startLevel = 1 }) {
         ammoRef.current -= 1;
         setAmmo(ammoRef.current);
         shootCooldownRef.current = 10;
+        shotsFiredRef.current += 1;
         playShootSound();
 
         // สลับ expression ทันทีหลังยิง
@@ -330,6 +338,8 @@ function GunGame({ startLevel = 1 }) {
                 playSound(200, 0.3, 'sawtooth');
               } else {
                 scoreRef.current += 1;
+                shotsHitRef.current += 1;
+                if (exprStartTimeRef.current) { exprSpeedsRef.current.push(Date.now() - exprStartTimeRef.current); exprStartTimeRef.current = null; }
                 playSound(880, 0.1, 'square');
               }
               setScore(scoreRef.current);
@@ -338,6 +348,23 @@ function GunGame({ startLevel = 1 }) {
                 setGameState('done');
                 setFinalScore(scoreRef.current);
                 if (currentLevelRef.current < 3) setUnlockedLevel(prev => Math.max(prev, currentLevelRef.current + 1));
+                const fired = shotsFiredRef.current;
+                const hit = shotsHitRef.current;
+                const avgExprSpeed = exprSpeedsRef.current.length > 0
+                  ? Math.round(exprSpeedsRef.current.reduce((a, b) => a + b, 0) / exprSpeedsRef.current.length)
+                  : null;
+                if (onGameEnd) onGameEnd({
+                  win: true,
+                  stars: scoreRef.current >= 15 ? 3 : scoreRef.current >= 8 ? 2 : 1,
+                  level: currentLevelRef.current,
+                  metrics: {
+                    shots_fired: fired,
+                    shots_hit: hit,
+                    accuracy: fired > 0 ? Math.round((hit / fired) * 100) : 0,
+                    avg_expr_speed_ms: avgExprSpeed,
+                    final_score: scoreRef.current
+                  }
+                });
               }
               bulletsRef.current.splice(bi, 1);
             }
@@ -473,6 +500,12 @@ function GunGame({ startLevel = 1 }) {
   }, []);
 
   const startGame = (level = currentLevel) => {
+    if (cdTimerRef.current) { clearInterval(cdTimerRef.current); cdTimerRef.current = null; }
+    if (birdSpawnRef.current) { clearInterval(birdSpawnRef.current); birdSpawnRef.current = null; }
+    shotsFiredRef.current = 0;
+    shotsHitRef.current = 0;
+    exprSpeedsRef.current = [];
+    exprStartTimeRef.current = null;
     setCurrentLevel(level);
     currentLevelRef.current = level;
     scoreRef.current = 0;
@@ -500,17 +533,18 @@ function GunGame({ startLevel = 1 }) {
     const playBeep = (freq) => playSound(freq, 0.3, 'sine');
     playBeep(440);
     let c = 3;
-    const cd = setInterval(() => {
+    cdTimerRef.current = setInterval(() => {
       c -= 1; setCountdownNum(c);
       if (c <= 0) {
-        clearInterval(cd);
+        clearInterval(cdTimerRef.current); cdTimerRef.current = null;
         playBeep(880);
         setGameState('playing');
         gameStateRef.current = 'playing';
         setStatus(`ทำหน้า ${currentExprRef.current?.icon} แล้วยิง!`);
 
-        setInterval(() => {
-          if (gameStateRef.current !== 'playing') return;
+        exprStartTimeRef.current = Date.now();
+        birdSpawnRef.current = setInterval(() => {
+          if (gameStateRef.current !== 'playing') { clearInterval(birdSpawnRef.current); birdSpawnRef.current = null; return; }
           const alive = birdsRef.current.filter(b => !b.hit);
           const gc = LEVELS[currentLevelRef.current].goodBirdChance;
           if (alive.length < 4) {
@@ -530,7 +564,7 @@ function GunGame({ startLevel = 1 }) {
 
       <div className="relative w-full" style={{ height: '450px' }}>
         <video ref={videoRef} autoPlay
-          className="w-full h-full rounded-xl object-cover opacity-40"
+          className="w-full h-full rounded-xl object-cover"
           style={{ transform: 'scaleX(-1)' }}
         />
         <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" style={{ pointerEvents: 'none' }} />

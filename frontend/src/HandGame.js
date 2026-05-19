@@ -11,6 +11,10 @@ function HandGame({ onGameEnd }) {
   const scoreRef = useRef(0);
   const missRef = useRef(0);
   const modeRef = useRef('tap');
+  const spawnIntervalRef = useRef(null);
+  const gameCheckerRef = useRef(null);
+  const reactionTimesRef = useRef([]);
+  const tapOffsetsRef = useRef([]);
 
   const [status, setStatus] = useState('กำลังโหลด AI...');
   const [gameState, setGameState] = useState('idle');
@@ -95,6 +99,8 @@ function HandGame({ onGameEnd }) {
               const dist = Math.sqrt((fx - c.x) ** 2 + (fy - c.y) ** 2);
               if (dist < c.r) {
                 scoreRef.current += 1;
+                reactionTimesRef.current.push(Date.now() - c.born);
+                tapOffsetsRef.current.push(dist / c.r);
                 tapped = true;
               }
             }
@@ -229,9 +235,13 @@ function HandGame({ onGameEnd }) {
     };
   };
   const startGame = (selectedMode) => {
+    if (spawnIntervalRef.current) { clearInterval(spawnIntervalRef.current); spawnIntervalRef.current = null; }
+    if (gameCheckerRef.current) { clearInterval(gameCheckerRef.current); gameCheckerRef.current = null; }
     modeRef.current = selectedMode;
     scoreRef.current = 0;
     missRef.current = 0;
+    reactionTimesRef.current = [];
+    tapOffsetsRef.current = [];
     circlesRef.current = [];
     ballRef.current = null;
     setScore(null);
@@ -241,8 +251,8 @@ function HandGame({ onGameEnd }) {
 
     if (selectedMode === 'tap') {
       setStatus('👆 แตะวงกลมให้ทัน!');
-      const spawnInterval = setInterval(() => {
-        if (gameStateRef.current !== 'playing') { clearInterval(spawnInterval); return; }
+      spawnIntervalRef.current = setInterval(() => {
+        if (gameStateRef.current !== 'playing') { clearInterval(spawnIntervalRef.current); spawnIntervalRef.current = null; return; }
         if (circlesRef.current.length < 3) {
           circlesRef.current.push({
             id: Date.now(), type: 'tap',
@@ -257,10 +267,10 @@ function HandGame({ onGameEnd }) {
       spawnBall();
     }
 
-    const gameEndChecker = setInterval(() => {
-      if (gameStateRef.current !== 'playing') { clearInterval(gameEndChecker); return; }
+    gameCheckerRef.current = setInterval(() => {
+      if (gameStateRef.current !== 'playing') { clearInterval(gameCheckerRef.current); gameCheckerRef.current = null; return; }
       if (missRef.current >= 5) {
-        clearInterval(gameEndChecker);
+        clearInterval(gameCheckerRef.current); gameCheckerRef.current = null;
         gameStateRef.current = 'done';
         setGameState('done');
         setScore({ hit: scoreRef.current, miss: missRef.current });
@@ -270,7 +280,21 @@ function HandGame({ onGameEnd }) {
         const ratio = total > 0 ? h / total : 0;
         const stars = ratio >= 0.8 ? 3 : ratio >= 0.5 ? 2 : 1;
         const win = h >= 5;
-        if (onGameEnd) onGameEnd({ win, stars, level: null });
+        const rts = reactionTimesRef.current;
+        const offs = tapOffsetsRef.current;
+        const avgRT = rts.length > 0 ? Math.round(rts.reduce((a,b)=>a+b,0)/rts.length) : null;
+        const avgOff = offs.length > 0 ? Math.round((offs.reduce((a,b)=>a+b,0)/offs.length)*100)/100 : null;
+        if (onGameEnd) onGameEnd({
+          win, stars, level: null,
+          metrics: {
+            mode: modeRef.current,
+            hits: h,
+            misses: m,
+            tap_accuracy: total > 0 ? Math.round((h/total)*100) : 0,
+            reaction_time_avg_ms: avgRT,
+            tap_offset_avg: avgOff
+          }
+        });
       }
     }, 100);
   };
@@ -280,7 +304,7 @@ function HandGame({ onGameEnd }) {
       <h2 className="text-2xl font-bold mb-2">🎮 เกมบำบัดมือ</h2>
 
       <div className="relative w-full" style={{ height: '500px' }}>
-         <video ref={videoRef} autoPlay className="w-full h-full rounded-xl object-cover opacity-40" style={{ transform: 'scaleX(-1)' }} />
+         <video ref={videoRef} autoPlay className="w-full h-full rounded-xl object-cover" style={{ transform: 'scaleX(-1)' }} />
         <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" style={{ pointerEvents: 'none' }} />
 
         {gameState === 'playing' && (

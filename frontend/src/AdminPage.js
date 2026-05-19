@@ -55,12 +55,13 @@ const C = {
   muted: '#475569',
 };
 
-const GAME_EMOJI = { hand: '✨', jump: '🐰', shadow: '🥊', gun: '🏹' };
+const GAME_EMOJI = { hand: '✨', jump: '🐰', shadow: '🥊', gun: '🏹', aero: '🕺' };
 const GAME_COLOR = {
   hand:   { bg: '#0D9488', light: '#F0FDFA' },
   jump:   { bg: '#C05E35', light: '#FFF0E8' },
   shadow: { bg: '#7C3AED', light: '#FAF5FF' },
   gun:    { bg: '#DC2626', light: '#FFF5F5' },
+  aero:   { bg: '#059669', light: '#ECFDF5' },
 };
 
 export default function AdminPage() {
