@@ -1,35 +1,31 @@
-name: Auto Deploy to GitHub Pages
+name: Build and Deploy Frontend
 
-# 1. Trigger the robot whenever someone pushes code to the 'main' branch
 on:
   push:
     branches:
       - main
 
+# 1. Add this defaults block right here
+defaults:
+  run:
+    working-directory: ./frontend
+
 jobs:
-  build-and-deploy:
-    # 2. Tell GitHub to give us a clean Ubuntu Linux virtual machine
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      # 3. Pull the code from your repository into the machine
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 4. Set up the Node.js runtime environment
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-node: '20'
+          node-version: '20'
 
-      # 5. Install dependencies and build the static production files
-      - name: Install and Build
-        run: |
-          npm install
-          npm run build
+      # 2. Because of the default setting above, these will now run inside /frontend automatically!
+      - name: Install dependencies
+        run: npm install
 
-      # 6. Use a pre-made action to push the built files to the gh-pages branch
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: build # or dist if using Vite
+      - name: Build Project
+        run: npm run build
