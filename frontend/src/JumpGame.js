@@ -69,8 +69,8 @@ function JumpGame({ startLevel = 1, onGameEnd }) {
     },
   };
 
-  const GRAVITY = 0.35;
-  const JUMP_FORCE = -13;
+  const GRAVITY = 0.25;
+  const JUMP_FORCE = -9;
   const PLAYER_SPEED = 5;
   const PLAYER_W = 30, PLAYER_H = 40;
   const PLAT_H = 12;
@@ -303,25 +303,62 @@ function JumpGame({ startLevel = 1, onGameEnd }) {
         }
       }
 
-      // วาด
-      ctx.fillStyle = '#0f172a';
+      // วาด — space background
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+      bgGrad.addColorStop(0, '#0d0020');
+      bgGrad.addColorStop(0.5, '#0a0535');
+      bgGrad.addColorStop(1, '#020015');
+      ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      for (let i = 0; i < 30; i++) {
+      // Animated starfield (scroll with score)
+      const scrollOffset = scoreRef.current * 0.3;
+      for (let i = 0; i < 70; i++) {
+        const sx = (i * 137 + i * 11) % W;
+        const sy = ((i * 97 + scrollOffset) % H + H) % H;
+        const size = i % 4 === 0 ? 2 : 1;
+        const alpha = 0.35 + (i % 5) * 0.13;
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
-        ctx.arc((i * 137) % W, (i * 97) % H, 1.5, 0, 2*Math.PI);
+        ctx.arc(sx, sy, size, 0, 2 * Math.PI);
         ctx.fill();
       }
+      // Large twinkling stars
+      for (let i = 0; i < 10; i++) {
+        const sx = (i * 73 + 20) % W;
+        const sy = ((i * 193 + scrollOffset * 0.4) % H + H) % H;
+        const twinkle = 0.5 + 0.5 * Math.sin(Date.now() * 0.003 + i * 1.3);
+        ctx.fillStyle = `rgba(200,220,255,${twinkle * 0.85})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.5, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      // Nebula glow (subtle)
+      const nebula = ctx.createRadialGradient(W * 0.7, H * 0.3, 0, W * 0.7, H * 0.3, 120);
+      nebula.addColorStop(0, 'rgba(120,50,200,0.08)');
+      nebula.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = nebula;
+      ctx.fillRect(0, 0, W, H);
 
+      // Platforms — neon colour per level
+      const lv = currentLevelRef.current;
+      const platColors   = { 1: '#22d3ee', 2: '#a855f7', 3: '#fb923c' };
+      const platGlows    = { 1: '#0891b2', 2: '#7c3aed', 3: '#ea580c' };
       platformsRef.current.forEach(plat => {
         if (plat.y > -20 && plat.y < H + 20) {
-          ctx.fillStyle = '#22c55e';
+          ctx.shadowColor = platColors[lv] || '#22d3ee';
+          ctx.shadowBlur = 10;
+          ctx.fillStyle = platColors[lv] || '#22d3ee';
           ctx.beginPath();
           ctx.roundRect(plat.x, plat.y, plat.w, PLAT_H, 4);
           ctx.fill();
+          // thin bright top edge
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.fillRect(plat.x + 4, plat.y, plat.w - 8, 2);
         }
       });
+      ctx.shadowBlur = 0;
 
       monstersRef.current.forEach(m => {
         const py = m.platform.y - m.h;
@@ -419,6 +456,14 @@ function JumpGame({ startLevel = 1, onGameEnd }) {
     platforms[0] = { x: W/2 - 60, y: H - 60, w: 120 };
     platformsRef.current = platforms;
     monstersRef.current = [];
+    // spawn มอนสเตอร์ในแพลตฟอร์มเริ่มต้นสำหรับเลเวล 2 และ 3
+    if (level >= 2) {
+      platforms.forEach((p, i) => {
+        if (i !== 0 && Math.random() < cfg.monsterChance) {
+          monstersRef.current.push(spawnMonster(p));
+        }
+      });
+    }
     playerRef.current = { x: W/2, y: H - 100, vy: 0, onGround: true };
     scoreRef.current = 0;
     prevKneeRef.current = null;

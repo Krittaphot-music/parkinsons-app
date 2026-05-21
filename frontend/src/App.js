@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import HandCamera from './HandCamera';
 import HandGame from './HandGame';
+import VoiceFlappyGame from './VoiceFlappyGame';
 import ShadowGame from './ShadowGame';
 import JumpGame from './JumpGame';
 import GunGame from './GunGame';
@@ -20,11 +21,11 @@ import {
   ChevronLeft, Lock, User
 } from 'lucide-react';
 const GAMES = [
-  { id: 'hand',   name: 'HandMaster',  desc: 'ฝึกความแม่นยำของนิ้วมือ',              emoji: '✨', bg: '#F0FDFA', color: '#0D9488', border: '#5DCAA5', sdark: '#A7F3D0', slight: '#F0FDFA', drop: '#0D9488', levels: false, daily: true,  available: true  },
-  { id: 'jump',   name: 'StarJumper',  desc: 'ฝึกการทรงตัวและการเคลื่อนไหวขา',      emoji: '🐰', bg: '#FFF0E8', color: '#C05E35', border: '#F4956A', sdark: '#FFD4B8', slight: '#FFF5EE', drop: '#C05E35', levels: true,  daily: true,  available: true  },
-  { id: 'shadow', name: 'ShadowMove',  desc: 'ฝึกการเคลื่อนไหวแขนขาและการประสานงาน', emoji: '🥊', bg: '#FAF5FF', color: '#7C3AED', border: '#A78BFA', sdark: '#DDD6FE', slight: '#FAF5FF', drop: '#7C3AED', levels: true,  daily: true,  available: true  },
-  { id: 'gun',    name: 'FaceShooter', desc: 'ฝึกกล้ามเนื้อใบหน้าและการควบคุมนิ้วมือ', emoji: '🏹', bg: '#FFF5F5', color: '#DC2626', border: '#FCA5A5', sdark: '#FECACA', slight: '#FFF5F5', drop: '#DC2626', levels: true,  daily: true,  available: true  },
   { id: 'aero',   name: 'AeroDance',   desc: 'เต้นอาโรบิก 4 เซต ฝึกทรงตัวและ ROM',     emoji: '🕺', bg: '#F0FFF4', color: '#059669', border: '#34D399', sdark: '#A7F3D0', slight: '#ECFDF5', drop: '#059669', levels: false, daily: true,  available: true  },
+  { id: 'gun',    name: 'FaceShooter', desc: 'ฝึกกล้ามเนื้อใบหน้าและการควบคุมนิ้วมือ', emoji: '🏹', bg: '#FFF5F5', color: '#DC2626', border: '#FCA5A5', sdark: '#FECACA', slight: '#FFF5F5', drop: '#DC2626', levels: true,  daily: true,  available: true  },  
+  { id: 'jump',   name: 'StarJumper',  desc: 'ฝึกการทรงตัวและการเคลื่อนไหวขา',      emoji: '🐰', bg: '#FAF5FF', color: '#7C3AED', border: '#A78BFA', sdark: '#DDD6FE', slight: '#FAF5FF', drop: '#7C3AED', levels: true,  daily: true,  available: true  },
+  //{ id: 'shadow', name: 'ShadowMove',  desc: 'ฝึกการเคลื่อนไหวแขนขาและการประสานงาน', emoji: '🥊', bg: '#FAF5FF', color: '#7C3AED', border: '#A78BFA', sdark: '#DDD6FE', slight: '#FAF5FF', drop: '#7C3AED', levels: true,  daily: true,  available: true  },
+  { id: 'flappy', name: 'SonicBird', desc: 'ใช้เสียงบังคับนก', emoji: '🐥', bg: '#FFF9E6', color: '#D4900A', border: '#F9C784', sdark: '#FDE9B8', slight: '#FFFDF5', drop: '#D4900A', levels: true, daily: true, available: true },
 ];
 
 const COLORS = {
@@ -174,6 +175,7 @@ function App() {
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState(1);
+  const [dashChartGame, setDashChartGame] = useState('jump');
   const landmarkHistory = useRef([]);
 
   const [profile, setProfile] = useState(() => {
@@ -204,6 +206,7 @@ function App() {
       win: result.win,
       stars: result.stars,
       coinsEarned,
+      metrics: result.metrics || null,
       timestamp: new Date().toISOString(),
     };
     setGameHistory(prev => {
@@ -221,7 +224,10 @@ function App() {
         win: result.win,
         stars: result.stars,
         coins_earned: coinsEarned,
-      }]).then(() => {});
+        metrics: result.metrics || null,
+      }]).then(({ error }) => {
+        if (error) console.error('[game_sessions] insert error:', error.message);
+      });
     }
   };
 
@@ -791,7 +797,7 @@ function App() {
                       {g.levels && g.available && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
                           {[1,2,3].map(lv => (
-                            <div key={lv} style={{ width: 8, height: 8, background: lv <= 2 ? g.color : 'rgba(0,0,0,0.12)' }}/>
+                            <div key={lv} style={{ width: 8, height: 8, background: lv <= 3 ? g.color : 'rgba(0,0,0,0.12)' }}/>
                           ))}
                           <span style={{ fontSize: 10, color: COLORS.sub, marginLeft: 2, fontFamily: FONT }}>3 ด่าน</span>
                         </div>
@@ -827,9 +833,10 @@ function App() {
                 <Card style={{ padding: isMobile ? 12 : 20 }}>
                   {gameMode === 'hand' && <HandGame onGameEnd={(r) => handleGameEnd('hand', 'นิ้วเวทมนตร์', r)}/>}
                   {gameMode === 'shadow' && <ShadowGame onGameEnd={(r) => handleGameEnd('shadow', '10ท่าพาเพลิน', r)}/>}
-                  {gameMode === 'jump' && <JumpGame onGameEnd={(r) => handleGameEnd('jump', 'กระต่ายหรรษา', r)}/>}
+                  {gameMode === 'jump' && <JumpGame startLevel={selectedLevel} onGameEnd={(r) => handleGameEnd('jump', 'กระต่ายหรรษา', r)}/>}
                   {gameMode === 'gun' && <GunGame onGameEnd={(r) => handleGameEnd('gun', 'นักธนู', r)}/>}
                   {gameMode === 'aero' && <AeroGame onGameEnd={(r) => handleGameEnd('aero', 'AeroDance', r)}/>}
+                  {gameMode === 'flappy' && <VoiceFlappyGame startLevel={selectedLevel} onGameEnd={(r) => handleGameEnd('flappy', 'SonicBird', r)}/>}
                   {(gameMode === 'bird' || gameMode === 'runner') && (
                     <div style={{ textAlign: 'center', padding: '60px 24px' }}>
                       <div style={{ fontSize: 64, marginBottom: 16 }}>
@@ -875,9 +882,9 @@ function App() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
                     {[
-                      { lv: 1, label: 'EASY',   stars: '★★★', locked: false },
+                      { lv: 1, label: 'EASY',   stars: '★☆☆', locked: false },
                       { lv: 2, label: 'NORMAL', stars: '★★☆', locked: false },
-                      { lv: 3, label: 'HARD',   stars: '★☆☆', locked: false },
+                      { lv: 3, label: 'HARD',   stars: '★★★', locked: false },
                     ].map(item => (
                       <div
                         key={item.lv}
@@ -919,30 +926,77 @@ function App() {
         {/* DASHBOARD */}
         {page === 'dashboard' && (() => {
           const GAME_META = {
-            hand:   { emoji: '✨', color: COLORS.green,  bg: COLORS.greenLight  },
-            shadow: { emoji: '🥊', color: COLORS.purple, bg: COLORS.purpleLight },
-            jump:   { emoji: '🐰', color: COLORS.orange, bg: COLORS.orangeLight },
-            gun:    { emoji: '🏹', color: COLORS.blue,   bg: COLORS.blueLight   },
+            hand:   { emoji: '✨', color: COLORS.green,  bg: COLORS.greenLight,  border: COLORS.green,  sd: '#A7F3D0', sl: '#F0FDFA', drop: COLORS.greenDark,  name: 'HandGame'    },
+            shadow: { emoji: '🥊', color: COLORS.purple, bg: COLORS.purpleLight, border: COLORS.purple, sd: '#DDD6FE', sl: '#FAF5FF', drop: COLORS.purpleDark, name: 'ShadowMove'  },
+            jump:   { emoji: '🚀', color: COLORS.purple, bg: COLORS.purpleLight, border: COLORS.purple, sd: '#DDD6FE', sl: '#FAF5FF', drop: COLORS.purpleDark, name: 'StarJumper'  },
+            gun:    { emoji: '🏹', color: COLORS.blue,   bg: COLORS.blueLight,   border: COLORS.blue,   sd: '#BFDBFE', sl: '#EFF6FF', drop: COLORS.blueDark,   name: 'FaceShooter' },
+            flappy: { emoji: '🐥', color: '#D4900A',     bg: '#FFF9E6',          border: '#F9C784',     sd: '#FDE9B8', sl: '#FFFDF5', drop: '#D4900A',         name: 'SonicBird'   },
+            aero:   { emoji: '🕺', color: COLORS.green,  bg: COLORS.greenLight,  border: COLORS.green,  sd: '#A7F3D0', sl: '#F0FDFA', drop: COLORS.greenDark,  name: 'AeroDance'   },
           };
-          const totalWins = gameHistory.filter(h => h.win).length;
+          const totalWins  = gameHistory.filter(h => h.win).length;
           const totalGames = gameHistory.length;
           const formatDate = (iso) => {
             const d = new Date(iso);
             return `${d.getDate()}/${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
           };
           const renderStars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+          // SVG line chart
+          const renderChart = (data, color, label) => {
+            if (!data || data.length < 2) return (
+              <p style={{ fontFamily: FONT, fontSize: 9, color: COLORS.sub, textAlign: 'center', margin: '12px 0' }}>เล่นเพิ่มอีกหน่อยเพื่อดูกราฟ!</p>
+            );
+            const CW = 300, CH = 68, pad = 10;
+            const max = Math.max(...data, 1);
+            const ww = CW - pad * 2, hh = CH - pad * 2;
+            const pts = data.map((v, i) => `${pad + (i / (data.length - 1)) * ww},${pad + hh - (v / max) * hh}`).join(' ');
+            const area = `${pad},${pad + hh} ${pts} ${pad + ww},${pad + hh}`;
+            return (
+              <svg width="100%" height={CH} viewBox={`0 0 ${CW} ${CH}`} style={{ display: 'block' }}>
+                {[0.33, 0.66, 1].map((t, i) => (
+                  <line key={i} x1={pad} y1={pad + hh * (1 - t)} x2={pad + ww} y2={pad + hh * (1 - t)}
+                    stroke="rgba(0,0,0,0.07)" strokeWidth={1} strokeDasharray="3 3"/>
+                ))}
+                <polygon points={area} fill={color} fillOpacity={0.15}/>
+                <polyline points={pts} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/>
+                {data.map((v, i) => (
+                  <circle key={i}
+                    cx={pad + (i / (data.length - 1)) * ww}
+                    cy={pad + hh - (v / max) * hh}
+                    r={3.5} fill={color} stroke="white" strokeWidth={2}/>
+                ))}
+              </svg>
+            );
+          };
+
+          // ข้อมูลเกมที่เลือก
+          const cMeta      = GAME_META[dashChartGame] || GAME_META.jump;
+          const cHistory   = gameHistory.filter(h => h.gameId === dashChartGame).slice(0, 20).reverse();
+          const cWins      = cHistory.filter(h => h.win).length;
+          const cWinRate   = cHistory.length > 0 ? Math.round((cWins / cHistory.length) * 100) : 0;
+          const cAvgStars  = cHistory.length > 0
+            ? (cHistory.reduce((s, h) => s + (h.stars || 0), 0) / cHistory.length).toFixed(1) : '—';
+          const cScoreData = cHistory.map(h => {
+            if (dashChartGame === 'jump')   return h.metrics?.final_score   ?? h.stars * 33;
+            if (dashChartGame === 'flappy') return h.metrics?.pipes_passed  ?? h.stars * 3;
+            return h.stars;
+          });
+          const cConsistencyData = cHistory
+            .filter(h => h.metrics?.consistency_score != null)
+            .map(h => h.metrics.consistency_score);
+
           return (
             <div>
               <h2 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT }}>
                 <Activity size={20}/> พัฒนาการ
               </h2>
 
-              {/* Coin + Stats summary */}
+              {/* Stats summary */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
                 {[
-                  { icon: '🪙', label: 'Coins', value: coins, bc: COLORS.yellow, sd: '#FDE9B8', sl: '#FFFDF5', drop: COLORS.yellowDark },
-                  { icon: '🏆', label: 'ชนะ', value: totalWins, bc: COLORS.green, sd: '#A7F3D0', sl: '#F0FDFA', drop: COLORS.greenDark },
-                  { icon: '🎮', label: 'เกมทั้งหมด', value: totalGames, bc: COLORS.blue, sd: '#BFDBFE', sl: '#EFF6FF', drop: COLORS.blueDark },
+                  { icon: '🪙', label: 'Coins',       value: coins,      bc: COLORS.yellow, sd: '#FDE9B8', sl: '#FFFDF5', drop: COLORS.yellowDark },
+                  { icon: '🏆', label: 'ชนะ',         value: totalWins,  bc: COLORS.green,  sd: '#A7F3D0', sl: '#F0FDFA', drop: COLORS.greenDark  },
+                  { icon: '🎮', label: 'เกมทั้งหมด',  value: totalGames, bc: COLORS.blue,   sd: '#BFDBFE', sl: '#EFF6FF', drop: COLORS.blueDark   },
                 ].map(s => (
                   <div key={s.label} style={{ ...pxCard(s.bc, s.sd, s.sl, s.drop), padding: '14px 10px', textAlign: 'center' }}>
                     <div style={{ fontSize: isMobile ? 22 : 26, marginBottom: 4 }}>{s.icon}</div>
@@ -950,6 +1004,83 @@ function App() {
                     <div style={{ fontFamily: FONT, fontSize: 9, color: COLORS.sub, marginTop: 3 }}>{s.label}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* ── Analytics Chart ── */}
+              <div style={{ ...pxCard(cMeta.border, cMeta.sd, cMeta.sl, cMeta.drop), padding: 16, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                  <BarChart2 size={14} color={cMeta.color}/>
+                  <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: COLORS.text }}>วิเคราะห์ผลการเล่น</span>
+                </div>
+
+                {/* Game selector tabs */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'jump',   emoji: '🚀', name: 'StarJumper'  },
+                    { id: 'flappy', emoji: '🐥', name: 'SonicBird'   },
+                    { id: 'gun',    emoji: '🏹', name: 'FaceShooter' },
+                    { id: 'aero',   emoji: '🕺', name: 'AeroDance'   },
+                  ].map(g => {
+                    const gm = GAME_META[g.id];
+                    const active = dashChartGame === g.id;
+                    return (
+                      <button key={g.id} onClick={() => setDashChartGame(g.id)} style={{
+                        background: active ? gm.color : gm.bg,
+                        color: active ? '#fff' : gm.color,
+                        border: `2px solid ${gm.color}`,
+                        boxShadow: active ? `2px 2px 0 ${gm.drop}` : 'none',
+                        padding: '4px 10px', fontFamily: FONT, fontSize: 9,
+                        cursor: 'pointer', letterSpacing: 0.3,
+                      }}>
+                        {g.emoji} {g.name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {cHistory.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>{cMeta.emoji}</div>
+                    <p style={{ fontFamily: FONT, fontSize: 9, color: COLORS.sub }}>ยังไม่มีข้อมูล เล่น {cMeta.name} ก่อนนะ!</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Quick stats row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 14, padding: '10px', background: 'rgba(0,0,0,0.03)', border: `1px solid ${cMeta.border}` }}>
+                      {[
+                        { label: 'ชนะ',         value: `${cWinRate}%`,    color: COLORS.greenDark },
+                        { label: 'ดาวเฉลี่ย',   value: `${cAvgStars}★`,  color: '#D4900A'        },
+                        { label: 'ครั้งที่เล่น', value: cHistory.length,  color: COLORS.text      },
+                      ].map(s => (
+                        <div key={s.label} style={{ textAlign: 'center' }}>
+                          <div style={{ fontFamily: FONT, fontSize: isMobile ? 14 : 16, fontWeight: 700, color: s.color }}>{s.value}</div>
+                          <div style={{ fontFamily: FONT, fontSize: 8, color: COLORS.sub, marginTop: 2 }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Score trend */}
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontFamily: FONT, fontSize: 9, color: COLORS.sub, marginBottom: 6 }}>
+                        {dashChartGame === 'jump'   ? '📈 คะแนนแต่ละรอบ (StarJumper)'  :
+                         dashChartGame === 'flappy' ? '📈 ท่อที่ผ่านได้ (SonicBird)'   :
+                                                      '📈 ดาวที่ได้แต่ละรอบ'}
+                      </div>
+                      {renderChart(cScoreData, cMeta.color)}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT, fontSize: 8, color: COLORS.sub, marginTop: 2 }}>
+                        <span>รอบแรก</span><span>ล่าสุด →</span>
+                      </div>
+                    </div>
+
+                    {/* StarJumper deep metrics — jump consistency */}
+                    {dashChartGame === 'jump' && cConsistencyData.length >= 2 && (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: `2px dashed ${COLORS.purple}` }}>
+                        <div style={{ fontFamily: FONT, fontSize: 9, color: COLORS.sub, marginBottom: 6 }}>🎯 ความสม่ำเสมอในการกระโดด (%)</div>
+                        {renderChart(cConsistencyData, '#a855f7')}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* History list */}
@@ -977,7 +1108,6 @@ function App() {
                       border: `2px solid ${h.win ? meta.color : '#D8C8B8'}`,
                       boxShadow: `2px 2px 0 ${h.win ? meta.color : '#C8B8A8'}`,
                     }}>
-                      {/* Game icon */}
                       <div style={{
                         width: 36, height: 36, flexShrink: 0,
                         background: meta.bg, border: `2px solid ${meta.color}`,
@@ -985,8 +1115,6 @@ function App() {
                       }}>
                         {meta.emoji}
                       </div>
-
-                      {/* Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                           <span style={{ fontFamily: FONT, fontSize: isMobile ? 9 : 10, fontWeight: 700, color: COLORS.text }}>{h.gameName}</span>
@@ -1000,9 +1128,15 @@ function App() {
                           </span>
                           <span style={{ fontFamily: FONT, fontSize: 8, color: COLORS.sub }}>{formatDate(h.timestamp)}</span>
                         </div>
+                        {h.metrics && (
+                          <div style={{ marginTop: 3, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            {h.metrics.final_score      != null && <span style={{ fontFamily: FONT, fontSize: 7, color: COLORS.purpleDark, background: COLORS.purpleLight, padding: '1px 4px', border: `1px solid ${COLORS.purple}` }}>⭐{h.metrics.final_score}pts</span>}
+                            {h.metrics.consistency_score != null && <span style={{ fontFamily: FONT, fontSize: 7, color: COLORS.greenDark,  background: COLORS.greenLight,  padding: '1px 4px', border: `1px solid ${COLORS.green}`  }}>🎯{h.metrics.consistency_score}%</span>}
+                            {h.metrics.pipes_passed     != null && <span style={{ fontFamily: FONT, fontSize: 7, color: '#D4900A',          background: '#FFF9E6',          padding: '1px 4px', border: '1px solid #F9C784'             }}>🐥×{h.metrics.pipes_passed}</span>}
+                            {h.metrics.duration_secs    != null && <span style={{ fontFamily: FONT, fontSize: 7, color: COLORS.sub,          background: '#f5f5f5',          padding: '1px 4px', border: '1px solid #ddd'                }}>⏱{h.metrics.duration_secs}s</span>}
+                          </div>
+                        )}
                       </div>
-
-                      {/* Result */}
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         {h.win ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>

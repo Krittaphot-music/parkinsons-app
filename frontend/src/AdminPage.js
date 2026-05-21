@@ -31,14 +31,20 @@ import { ChevronLeft, Search, UserPlus, Trash2 } from 'lucide-react';
 //   id uuid default gen_random_uuid() primary key,
 //   user_id uuid not null,
 //   game_id text,
+//   game_type text,
 //   game_name text,
 //   win boolean,
 //   stars integer,
 //   coins_earned integer,
+//   metrics jsonb,
 //   created_at timestamptz default now()
 // );
 // alter table public.game_sessions enable row level security;
 // create policy "allow all" on public.game_sessions for all using (true) with check (true);
+//
+// -- ถ้า table มีอยู่แล้ว เพิ่ม column metrics ด้วย:
+// alter table public.game_sessions add column if not exists metrics jsonb;
+// alter table public.game_sessions add column if not exists game_type text;
 // ═══════════════════════════════════════════════════════════════════
 
 const C = {
@@ -55,13 +61,14 @@ const C = {
   muted: '#475569',
 };
 
-const GAME_EMOJI = { hand: '✨', jump: '🐰', shadow: '🥊', gun: '🏹', aero: '🕺' };
+const GAME_EMOJI = { hand: '✨', jump: '🚀', shadow: '🥊', gun: '🏹', aero: '🕺', flappy: '🐥' };
 const GAME_COLOR = {
   hand:   { bg: '#0D9488', light: '#F0FDFA' },
-  jump:   { bg: '#C05E35', light: '#FFF0E8' },
+  jump:   { bg: '#7C3AED', light: '#FAF5FF' },
   shadow: { bg: '#7C3AED', light: '#FAF5FF' },
   gun:    { bg: '#DC2626', light: '#FFF5F5' },
   aero:   { bg: '#059669', light: '#ECFDF5' },
+  flappy: { bg: '#D4900A', light: '#FFF9E6' },
 };
 
 export default function AdminPage() {
@@ -375,6 +382,140 @@ export default function AdminPage() {
   // VIEW: PATIENT DETAIL
   // ═══════════════════════════════════════════════════════════════
   if (view === 'detail' && selectedPatient) {
+
+    // ── Chart helper ──────────────────────────────────────────────
+    const renderMiniChart = (data, color, h = 56) => {
+      if (!data || data.length < 2) return null;
+      const CW = 300, CH = h, pad = 6;
+      const max = Math.max(...data, 1);
+      const ww = CW - pad * 2, hh = CH - pad * 2;
+      const pts = data.map((v, i) =>
+        `${pad + (i / (data.length - 1)) * ww},${pad + hh - (v / max) * hh}`
+      ).join(' ');
+      const area = `${pad},${pad + hh} ${pts} ${pad + ww},${pad + hh}`;
+      return (
+        <svg width="100%" height={CH} viewBox={`0 0 ${CW} ${CH}`} style={{ display: 'block' }}>
+          {[0.33, 0.66, 1].map((t, i) => (
+            <line key={i} x1={pad} y1={pad + hh * (1 - t)} x2={pad + ww} y2={pad + hh * (1 - t)}
+              stroke="rgba(255,255,255,0.07)" strokeWidth={1}/>
+          ))}
+          <polygon points={area} fill={color} fillOpacity={0.18}/>
+          <polyline points={pts} fill="none" stroke={color} strokeWidth={2.5}
+            strokeLinecap="round" strokeLinejoin="round"/>
+          {data.map((v, i) => (
+            <circle key={i}
+              cx={pad + (i / (data.length - 1)) * ww}
+              cy={pad + hh - (v / max) * hh}
+              r={3} fill={color} stroke={C.bg} strokeWidth={1.5}/>
+          ))}
+        </svg>
+      );
+    };
+
+    // ── Export Report ─────────────────────────────────────────────
+    const exportReport = () => {
+      const today = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const gameRows = Object.entries(sessionsByGame).map(([gameId, sessions]) => {
+        const gWins = sessions.filter(s => s.win).length;
+        const gRate = Math.round((gWins / sessions.length) * 100);
+        const avgStars = (sessions.reduce((s, h) => s + (h.stars || 0), 0) / sessions.length).toFixed(1);
+        const barW = gRate;
+        return `
+          <tr>
+            <td>${GAME_EMOJI[gameId] || '🎮'} ${sessions[0]?.game_name || gameId}</td>
+            <td style="text-align:center">${sessions.length}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:8px;background:#E2E8F0;border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:${barW}%;background:${GAME_COLOR[gameId]?.bg || '#6B7280'};border-radius:4px"></div>
+                </div>
+                <span style="font-size:12px;color:#64748B;min-width:50px">${gWins}/${sessions.length} (${gRate}%)</span>
+              </div>
+            </td>
+            <td style="text-align:center;color:#D97706">${'★'.repeat(Math.round(avgStars))}${'☆'.repeat(3 - Math.round(avgStars))} ${avgStars}</td>
+          </tr>`;
+      }).join('');
+
+      const recentRows = gameSessions.slice(0, 20).map(s => {
+        const gc = GAME_COLOR[s.game_id] || { bg: '#6B7280' };
+        const metricsText = s.metrics
+          ? Object.entries(s.metrics)
+              .filter(([k]) => k !== 'reason')
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(' | ')
+          : '';
+        return `
+          <tr>
+            <td>${GAME_EMOJI[s.game_id] || '🎮'} ${s.game_name || s.game_id}</td>
+            <td style="text-align:center">${s.win ? '✅ ชนะ' : '❌ แพ้'}</td>
+            <td style="text-align:center;color:#D97706">${'★'.repeat(s.stars || 0)}${'☆'.repeat(3 - (s.stars || 0))}</td>
+            <td style="font-size:11px;color:#94A3B8">${metricsText}</td>
+            <td style="color:#94A3B8;font-size:11px">${formatDate(s.created_at)}</td>
+          </tr>`;
+      }).join('');
+
+      const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>รายงานพัฒนาการ — ${selectedPatient.name || 'ผู้ป่วย'}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+  *{box-sizing:border-box}
+  body{font-family:'Sarabun',sans-serif;color:#1E293B;max-width:700px;margin:40px auto;padding:0 24px;font-size:14px}
+  h1{color:#0F172A;border-bottom:3px solid #3B82F6;padding-bottom:12px;margin-bottom:6px;font-size:22px}
+  h2{color:#1E293B;font-size:16px;margin:28px 0 10px;border-left:4px solid #3B82F6;padding-left:10px}
+  .meta{color:#64748B;font-size:13px;margin-bottom:24px;display:flex;gap:24px;flex-wrap:wrap}
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:20px 0}
+  .card{background:#F8FAFC;border:1px solid #CBD5E1;border-radius:10px;padding:16px;text-align:center}
+  .card .val{font-size:28px;font-weight:700;color:#1E293B}
+  .card .lbl{font-size:11px;color:#94A3B8;margin-top:4px}
+  table{width:100%;border-collapse:collapse;margin:12px 0}
+  th{background:#1E293B;color:#fff;padding:9px 14px;text-align:left;font-size:12px;font-weight:600}
+  td{border-bottom:1px solid #E2E8F0;padding:8px 14px;font-size:13px;vertical-align:middle}
+  tr:nth-child(even) td{background:#F8FAFC}
+  .footer{margin-top:40px;color:#94A3B8;font-size:11px;text-align:center;border-top:1px solid #E2E8F0;padding-top:16px}
+  @media print{body{margin:20px}button{display:none}}
+</style>
+</head>
+<body>
+<h1>🩺 รายงานพัฒนาการผู้ป่วย</h1>
+<div class="meta">
+  <span><strong>ชื่อผู้ป่วย:</strong> ${selectedPatient.name || 'ไม่ระบุ'}</span>
+  <span><strong>วันที่ออกรายงาน:</strong> ${today}</span>
+  <span><strong>แพทย์ผู้ดูแล:</strong> ${doctor?.username || '-'}</span>
+</div>
+
+<div class="summary">
+  <div class="card"><div class="val">${totalSessions}</div><div class="lbl">ครั้งที่เล่นทั้งหมด</div></div>
+  <div class="card"><div class="val" style="color:#22C55E">${wins}</div><div class="lbl">ชนะ</div></div>
+  <div class="card"><div class="val" style="color:#3B82F6">${winRate}%</div><div class="lbl">Win Rate</div></div>
+</div>
+
+<h2>📊 สรุปผลตามเกม</h2>
+<table>
+  <thead><tr><th>เกม</th><th>จำนวนครั้ง</th><th>Win Rate</th><th>ดาวเฉลี่ย</th></tr></thead>
+  <tbody>${gameRows}</tbody>
+</table>
+
+<h2>📋 ประวัติล่าสุด (20 รายการ)</h2>
+<table>
+  <thead><tr><th>เกม</th><th>ผลลัพธ์</th><th>ดาว</th><th>ข้อมูลเพิ่มเติม</th><th>วันที่</th></tr></thead>
+  <tbody>${recentRows}</tbody>
+</table>
+
+<div class="footer">Parkinson's Helper • สร้างโดยระบบแพทย์อัตโนมัติ • ${today}</div>
+<script>window.onload = () => window.print();</script>
+</body>
+</html>`;
+      const w = window.open('', '_blank');
+      w.document.write(html);
+      w.document.close();
+    };
+
+    // ── Pre-computed analytics ────────────────────────────────────
+    const allStarsChron = [...gameSessions].reverse().map(s => s.stars || 0);
+
     return (
       <div style={{
         minHeight: '100vh', background: C.bg,
@@ -388,18 +529,24 @@ export default function AdminPage() {
         }}>
           <button
             onClick={() => setView('dashboard')}
-            style={{
-              background: 'none', border: 'none', color: C.sub,
-              cursor: 'pointer', padding: '4px 4px 4px 0', display: 'flex',
-            }}>
+            style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', padding: '4px 4px 4px 0', display: 'flex' }}>
             <ChevronLeft size={20} />
           </button>
           <div style={{ flex: 1 }}>
-            <h2 style={{ color: C.text, margin: 0, fontSize: 16 }}>
-              👤 {selectedPatient.name || 'ไม่ระบุชื่อ'}
-            </h2>
+            <h2 style={{ color: C.text, margin: 0, fontSize: 16 }}>👤 {selectedPatient.name || 'ไม่ระบุชื่อ'}</h2>
             <p style={{ color: C.sub, margin: 0, fontSize: 12 }}>ประวัติการเล่นเกม</p>
           </div>
+          {gameSessions.length > 0 && (
+            <button
+              onClick={exportReport}
+              style={{
+                background: C.accent, border: 'none', borderRadius: 8,
+                color: '#fff', padding: '8px 16px', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+              📄 ส่งออกรายงาน
+            </button>
+          )}
         </div>
 
         <div style={{ maxWidth: 720, margin: '0 auto', padding: '20px 16px' }}>
@@ -422,29 +569,97 @@ export default function AdminPage() {
           ) : (
             <>
               {/* Summary stats */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
                 {[
-                  { label: 'เล่นทั้งหมด', value: totalSessions, icon: '🎮', color: C.accent },
-                  { label: 'ชนะ', value: wins, icon: '🏆', color: C.success },
-                  { label: 'Win Rate', value: `${winRate}%`, icon: '📊', color: C.warning },
+                  { label: 'เล่นทั้งหมด', value: totalSessions, icon: '🎮', color: C.accent  },
+                  { label: 'ชนะ',         value: wins,          icon: '🏆', color: C.success },
+                  { label: 'Win Rate',    value: `${winRate}%`, icon: '📊', color: C.warning },
                 ].map((s, i) => (
                   <div key={i} style={{
                     background: C.card, border: `1px solid ${C.border}`,
                     borderRadius: 12, padding: '14px 10px', textAlign: 'center',
                   }}>
                     <div style={{ fontSize: 22 }}>{s.icon}</div>
-                    <div style={{ color: s.color, fontWeight: 700, fontSize: 22, lineHeight: 1.2 }}>
-                      {s.value}
-                    </div>
+                    <div style={{ color: s.color, fontWeight: 700, fontSize: 22, lineHeight: 1.2 }}>{s.value}</div>
                     <div style={{ color: C.sub, fontSize: 11, marginTop: 2 }}>{s.label}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Per-game sections */}
+              {/* ── Analytics Panel ── */}
+              <div style={{
+                background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 12, padding: 18, marginBottom: 16,
+              }}>
+                <div style={{ color: C.text, fontWeight: 700, fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📈 วิเคราะห์พัฒนาการ
+                </div>
+
+                {/* Overall stars trend */}
+                {allStarsChron.length >= 2 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ color: C.sub, fontSize: 12, marginBottom: 6 }}>⭐ ดาวที่ได้ตลอดเวลา (ทุกเกมรวม)</div>
+                    <div style={{ background: C.card2, borderRadius: 8, padding: '10px 12px' }}>
+                      {renderMiniChart(allStarsChron, C.accent, 64)}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, marginTop: 4 }}>
+                      <span>เก่าสุด</span><span>ล่าสุด →</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Win rate per game — horizontal bars */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: C.sub, fontSize: 12, marginBottom: 10 }}>🏆 Win Rate แยกตามเกม</div>
+                  {Object.entries(sessionsByGame).map(([gameId, sessions]) => {
+                    const gWins = sessions.filter(s => s.win).length;
+                    const gRate = Math.round((gWins / sessions.length) * 100);
+                    const gc = GAME_COLOR[gameId] || { bg: '#6B7280' };
+                    return (
+                      <div key={gameId} style={{ marginBottom: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                          <span style={{ color: C.text, fontSize: 12 }}>
+                            {GAME_EMOJI[gameId] || '🎮'} {sessions[0]?.game_name || gameId}
+                          </span>
+                          <span style={{ color: C.sub, fontSize: 11 }}>{gWins}/{sessions.length} — {gRate}%</span>
+                        </div>
+                        <div style={{ height: 10, background: C.card2, borderRadius: 5, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${gRate}%`, background: gc.bg, borderRadius: 5 }}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Avg stars per game — bars */}
+                <div>
+                  <div style={{ color: C.sub, fontSize: 12, marginBottom: 10 }}>⭐ ดาวเฉลี่ยแยกตามเกม</div>
+                  {Object.entries(sessionsByGame).map(([gameId, sessions]) => {
+                    const avgStars = sessions.reduce((s, h) => s + (h.stars || 0), 0) / sessions.length;
+                    return (
+                      <div key={gameId} style={{ marginBottom: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                          <span style={{ color: C.text, fontSize: 12 }}>
+                            {GAME_EMOJI[gameId] || '🎮'} {sessions[0]?.game_name || gameId}
+                          </span>
+                          <span style={{ color: '#F59E0B', fontSize: 11 }}>
+                            {'★'.repeat(Math.round(avgStars))}{'☆'.repeat(3 - Math.round(avgStars))} {avgStars.toFixed(1)}
+                          </span>
+                        </div>
+                        <div style={{ height: 8, background: C.card2, borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${(avgStars / 3) * 100}%`, background: '#F59E0B', borderRadius: 4 }}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Per-game sections with mini trend charts */}
               {Object.entries(sessionsByGame).map(([gameId, sessions]) => {
                 const gc = GAME_COLOR[gameId] || { bg: '#6B7280', light: '#F9FAFB' };
                 const gameWins = sessions.filter(s => s.win).length;
+                const starsData = [...sessions].reverse().map(s => s.stars || 0);
                 return (
                   <div key={gameId} style={{
                     background: C.card, border: `1px solid ${C.border}`,
@@ -458,21 +673,26 @@ export default function AdminPage() {
                       <h3 style={{ color: '#fff', margin: 0, fontSize: 14 }}>
                         {GAME_EMOJI[gameId] || '🎮'} {sessions[0]?.game_name || gameId}
                       </h3>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span style={{
-                          background: 'rgba(255,255,255,0.2)', color: '#fff',
-                          padding: '2px 8px', borderRadius: 20, fontSize: 12,
-                        }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <span style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', padding: '2px 8px', borderRadius: 20, fontSize: 12 }}>
                           {sessions.length} ครั้ง
                         </span>
-                        <span style={{
-                          background: 'rgba(255,255,255,0.2)', color: '#fff',
-                          padding: '2px 8px', borderRadius: 20, fontSize: 12,
-                        }}>
+                        <span style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', padding: '2px 8px', borderRadius: 20, fontSize: 12 }}>
                           🏆 {gameWins}/{sessions.length}
                         </span>
                       </div>
                     </div>
+
+                    {/* Mini stars trend */}
+                    {starsData.length >= 2 && (
+                      <div style={{ padding: '10px 14px 6px', background: C.card2 }}>
+                        <div style={{ color: C.sub, fontSize: 11, marginBottom: 4 }}>⭐ trend ดาวแต่ละรอบ</div>
+                        {renderMiniChart(starsData, gc.bg, 50)}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, marginTop: 2 }}>
+                          <span>รอบแรก</span><span>ล่าสุด →</span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Session rows */}
                     <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -481,27 +701,30 @@ export default function AdminPage() {
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           padding: '7px 10px', background: C.bg, borderRadius: 8,
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 18 }}>{s.win ? '✅' : '❌'}</span>
-                            <span style={{ color: '#F59E0B', fontSize: 14, letterSpacing: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 16 }}>{s.win ? '✅' : '❌'}</span>
+                            <span style={{ color: '#F59E0B', fontSize: 13, letterSpacing: 1 }}>
                               {'⭐'.repeat(s.stars || 0)}{'☆'.repeat(3 - (s.stars || 0))}
                             </span>
                             {s.coins_earned > 0 && (
-                              <span style={{ color: '#FBBF24', fontSize: 12 }}>
-                                +{s.coins_earned}🪙
+                              <span style={{ color: '#FBBF24', fontSize: 11 }}>+{s.coins_earned}🪙</span>
+                            )}
+                            {s.metrics && (
+                              <span style={{ color: C.muted, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {s.metrics.final_score != null && `⭐${s.metrics.final_score}pts `}
+                                {s.metrics.pipes_passed != null && `🐥×${s.metrics.pipes_passed} `}
+                                {s.metrics.consistency_score != null && `🎯${s.metrics.consistency_score}% `}
+                                {s.metrics.duration_secs != null && `⏱${s.metrics.duration_secs}s`}
                               </span>
                             )}
                           </div>
-                          <span style={{ color: C.muted, fontSize: 11 }}>
+                          <span style={{ color: C.muted, fontSize: 11, flexShrink: 0, marginLeft: 8 }}>
                             {formatDate(s.created_at)}
                           </span>
                         </div>
                       ))}
                       {sessions.length > 8 && (
-                        <p style={{
-                          color: C.muted, fontSize: 12,
-                          textAlign: 'center', margin: '4px 0 4px',
-                        }}>
+                        <p style={{ color: C.muted, fontSize: 12, textAlign: 'center', margin: '4px 0' }}>
                           + {sessions.length - 8} ครั้งก่อนหน้า
                         </p>
                       )}
