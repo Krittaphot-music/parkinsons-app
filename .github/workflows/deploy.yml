@@ -5,12 +5,16 @@ on:
     branches:
       - main
 
+# Gives the script permission to update and deploy files to GitHub Pages
+permissions:
+  contents: write
+
 defaults:
   run:
     working-directory: ./frontend
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,5 +31,12 @@ jobs:
 
       - name: Build Project
         env:
-          CI: false # This tells the bundler to treat ESLint warnings as warnings, not fatal errors
-        run: npm run build
+          CI: false
+        run: npm run build # Note: If using Vite, make sure your folder is 'dist' below
+
+      # === THE DEPLOYMENT STEP ===
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: frontend/build # Path to your built files (Change to frontend/dist if using Vite)
+          branch: gh-pages # The branch the robot will deploy the files to
