@@ -5,9 +5,11 @@ on:
     branches:
       - main
 
-# Gives the script permission to update and deploy files to GitHub Pages
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 defaults:
   run:
@@ -15,6 +17,9 @@ defaults:
 
 jobs:
   build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps: deployment.outputs.page_url }}
     runs-on: ubuntu-latest
 
     steps:
@@ -32,11 +37,18 @@ jobs:
       - name: Build Project
         env:
           CI: false
-        run: npm run build # Note: If using Vite, make sure your folder is 'dist' below
+        run: npm run build # Make sure your project creates a 'build' or 'dist' folder
 
-      # === THE DEPLOYMENT STEP ===
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      # === UPLOAD THE ARTIFACT ===
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: frontend/build # Path to your built files (Change to frontend/dist if using Vite)
-          branch: gh-pages # The branch the robot will deploy the files to
+          # Change 'build' to 'dist' if you are using Vite!
+          path: ./frontend/build 
+
+      # === DEPLOY DIRECTLY TO PAGES ===
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/configure-pages@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
